@@ -11,7 +11,6 @@ import android.widget.TextView;
 import org.pytorch.IValue;
 import org.pytorch.Module;
 import org.pytorch.Tensor;
-import org.pytorch.torchvision.PytorchVision;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -47,9 +46,9 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void run() {
           handleResult(result);
-//          if (mBackgroundHandler != null) {
-//            mBackgroundHandler.post(mModuleForwardRunnable);
-//          }
+          if (mBackgroundHandler != null) {
+            mBackgroundHandler.post(mModuleForwardRunnable);
+          }
         }
       });
     }
@@ -91,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
   @Nullable
   protected Result doModuleForward() {
     if (mModule == null) {
+      Log.e(TAG, "Loading module from asset '" + BuildConfig.MODULE_ASSET_NAME + "'");
       final String moduleFileAbsoluteFilePath = new File(
           assetFilePath(this, BuildConfig.MODULE_ASSET_NAME)).getAbsolutePath();
       mModule = Module.load(moduleFileAbsoluteFilePath);
@@ -100,11 +100,15 @@ public class MainActivity extends AppCompatActivity {
 
     final long startTime = SystemClock.elapsedRealtime();
     final long moduleForwardStartTime = SystemClock.elapsedRealtime();
-    final Tensor outputTensor = mModule.forward(IValue.from(mInputTensor)).toTensor();
-    final long moduleForwardDuration = SystemClock.elapsedRealtime() - moduleForwardStartTime;
-    final float[] scores = outputTensor.getDataAsFloatArray();
-    final long analysisDuration = SystemClock.elapsedRealtime() - startTime;
+    //final Tensor outputTensor = mModule.forward(IValue.from(mInputTensor)).toTensor();
 
+    int input = 0;
+    mModule.forward(IValue.from(input));
+
+    final long moduleForwardDuration = SystemClock.elapsedRealtime() - moduleForwardStartTime;
+    //final float[] scores = outputTensor.getDataAsFloatArray();
+    final float[] scores = new float[1000];
+    final long analysisDuration = SystemClock.elapsedRealtime() - startTime;
     return new Result(scores, moduleForwardDuration, analysisDuration);
   }
 
@@ -133,7 +137,9 @@ public class MainActivity extends AppCompatActivity {
   @UiThread
   protected void handleResult(Result result) {
     String message = String.format("forwardDuration:%d", result.moduleForwardDuration);
+
     Log.i(TAG, message);
+    System.out.println("AAA java System.out.println " + message);
     mTextViewStringBuilder.insert(0, '\n').insert(0, message);
     if (mTextViewStringBuilder.length() > TEXT_TRIM_SIZE) {
       mTextViewStringBuilder.delete(TEXT_TRIM_SIZE, mTextViewStringBuilder.length());
