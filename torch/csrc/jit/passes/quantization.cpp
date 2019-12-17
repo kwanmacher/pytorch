@@ -634,6 +634,9 @@ class InsertQuantDeQuantHelper {
   std::unordered_map<Graph*, std::vector<std::string>> observer_modules_to_remove_;
   std::unordered_map<Graph*, std::vector<Node*>> nodes_to_destroy_;
   std::unordered_map<Graph*, std::unordered_map<Value*, QParamMap>> values_to_qparams_;
+  // Record qscheme for every graph, this is for checking
+  // each graph is only quantized with one type of QScheme
+  std::unordered_map<Graph*, QScheme> qscheme_for_graph_;
 };
 
 void InsertQuantDeQuantHelper::collectObserverNodesAndValueToQuantize(
@@ -659,6 +662,13 @@ void InsertQuantDeQuantHelper::collectObserverNodesAndValueToQuantize(
   Value* new_value = observer->input(1);
   v->replaceAllUsesWith(new_value);
   auto tp = getQSchemeAndQParamMap(module, v);
+  auto qscheme = std::get<0>(tp);
+  if (qscheme_for_graph_.count(g)) {
+    TORCH_CHECK(qscheme_for_graph_.at(g) == qscheme,
+                "Quantizing same graph with different QSchemes is not supported");
+  } else {
+    qscheme_for_graph_[g] = qscheme;
+  }
   auto qparam_map = std::get<1>(tp);
   values_to_qparams_[g].insert({new_value, qparam_map});
 }
@@ -831,6 +841,21 @@ void InsertQuantDeQuantHelper::run(
 
   script::Method method = module.get_method(method_name);
   auto graph = method.graph();
+
+  // We only need to register new parameters if the graph has
+  // been quantized before
+  if (values_to_qparams_.count(graph.get())) {
+    for (auto& pr : values_to_qparams_.at(graph.get())) {
+      Value* v = pr.first;
+      const std::unordered_map<std::string, IValue>& qparams = pr.second;
+      for (const auto& pr : qparams) {
+        const auto& name = pr.first;
+        const auto& qparam = pr.second;
+        module._ivalue()->setAttr(v->debugName() + name, qparam);
+      }
+    }
+    return;
+  }
 
   // prim::Param nodes do not belong to the graph. Hence the Insert
   // point is the beginning of graph node. This also safe guards against
